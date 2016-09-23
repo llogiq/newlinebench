@@ -26,5 +26,5 @@ test result: ok. 0 passed; 0 failed; 1 ignored; 15 measured
 
 I should note that this machine does have POPCNT, though it does not appear to
 make any difference. Please run the benchmark on your machine and report your
-finding as an [issue](https://github.com/llogiq/newlinebench/issue/new) on this
+finding as an [issue](https://github.com/llogiq/newlinebench/issues/new) on this
 project. Thank you!
