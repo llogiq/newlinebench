@@ -1,0 +1,5 @@
+[package]
+name = "newlinebench"
+version = "0.1.0"
+authors = ["Andre Bogus <andre.bogus@ankordata.de>"]
+
