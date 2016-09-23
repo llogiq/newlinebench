@@ -94,7 +94,7 @@ fn count_newlines_faster(s: &str) -> usize {
 }
 
 fn count_newlines_fastest(s: &str) -> usize {
-    fn mask_zero_bytes(x: usize) -> usize {
+    fn mask_zero(x: usize) -> usize {
         ((x.wrapping_sub(LO)) & !x & HI)
     }
     let text = s.as_bytes();
@@ -121,14 +121,14 @@ fn count_newlines_fastest(s: &str) -> usize {
             let x6 = *(ptr.offset((offset + USIZE_BYTES * 6) as isize) as *const usize);
             let x7 = *(ptr.offset((offset + USIZE_BYTES * 7) as isize) as *const usize);
 
-            count += (mask_zero_bytes(x0 ^ REP_NEWLINE)
-                | mask_zero_bytes(x1 ^ REP_NEWLINE) >> 1
-                | mask_zero_bytes(x2 ^ REP_NEWLINE) >> 2
-                | mask_zero_bytes(x3 ^ REP_NEWLINE) >> 3
-                | mask_zero_bytes(x4 ^ REP_NEWLINE) >> 4
-                | mask_zero_bytes(x5 ^ REP_NEWLINE) >> 5
-                | mask_zero_bytes(x6 ^ REP_NEWLINE) >> 6
-                | mask_zero_bytes(x7 ^ REP_NEWLINE) >> 7
+            count += (mask_zero(x0 ^ REP_NEWLINE)
+                | mask_zero(x1 ^ REP_NEWLINE) >> 1
+                | mask_zero(x2 ^ REP_NEWLINE) >> 2
+                | mask_zero(x3 ^ REP_NEWLINE) >> 3
+                | mask_zero(x4 ^ REP_NEWLINE) >> 4
+                | mask_zero(x5 ^ REP_NEWLINE) >> 5
+                | mask_zero(x6 ^ REP_NEWLINE) >> 6
+                | mask_zero(x7 ^ REP_NEWLINE) >> 7
                 ).count_ones() as usize;
         }
         offset += USIZE_BYTES * 8;
@@ -140,10 +140,10 @@ fn count_newlines_fastest(s: &str) -> usize {
             let x2 = *(ptr.offset((offset + USIZE_BYTES * 2) as isize) as *const usize);
             let x3 = *(ptr.offset((offset + USIZE_BYTES * 3) as isize) as *const usize);
 
-            count += (mask_zero_bytes(x0 ^ REP_NEWLINE)
-                | mask_zero_bytes(x1 ^ REP_NEWLINE) >> 1
-                | mask_zero_bytes(x2 ^ REP_NEWLINE) >> 2
-                | mask_zero_bytes(x3 ^ REP_NEWLINE) >> 3
+            count += (mask_zero(x0 ^ REP_NEWLINE)
+                | mask_zero(x1 ^ REP_NEWLINE) >> 1
+                | mask_zero(x2 ^ REP_NEWLINE) >> 2
+                | mask_zero(x3 ^ REP_NEWLINE) >> 3
                 ).count_ones() as usize;
         }
         offset += USIZE_BYTES * 4;
@@ -153,14 +153,81 @@ fn count_newlines_fastest(s: &str) -> usize {
             let x0 = *(ptr.offset(offset as isize) as *const usize);
             let x1 = *(ptr.offset((offset + USIZE_BYTES) as isize) as *const usize);
 
-            count += (mask_zero_bytes(x0 ^ REP_NEWLINE) |
-                mask_zero_bytes(x1 ^ REP_NEWLINE) >> 1).count_ones() as usize;
+            count += (mask_zero(x0 ^ REP_NEWLINE) |
+                mask_zero(x1 ^ REP_NEWLINE) >> 1).count_ones() as usize;
         }
         offset += USIZE_BYTES * 2;
     }
     while offset + USIZE_BYTES <= len {
         let x0 = unsafe { *(ptr.offset(offset as isize) as *const usize) };
-        count += mask_zero_bytes(x0 ^ REP_NEWLINE).count_ones() as usize;
+        count += mask_zero(x0 ^ REP_NEWLINE).count_ones() as usize;
+        offset += USIZE_BYTES;
+    }
+    count + text[offset..].iter().filter(|b| **b == b'\n').count()
+}
+
+fn count_newlines_screaming(s: &str) -> usize {
+    fn mask_zero(x: usize) -> usize {
+        ((x.wrapping_sub(LO)) & !x & HI) >> 7
+    }
+    let text = s.as_bytes();
+    let (ptr, len) = (text.as_ptr(), text.len());
+
+    let align = (ptr as usize) & (USIZE_BYTES - 1);
+    let mut offset;
+    let mut count;
+    if align > 0 {
+        offset = cmp::min(USIZE_BYTES - align, len);
+        count = text[..offset].iter().filter(|b| **b == b'\n').count();
+    } else {
+        offset = 0;
+        count = 0;
+    }
+    while offset + 8 * USIZE_BYTES <= len {
+        unsafe {
+            let x0 = *(ptr.offset(offset as isize) as *const usize);
+            let x1 = *(ptr.offset((offset + USIZE_BYTES) as isize) as *const usize);
+            let x2 = *(ptr.offset((offset + USIZE_BYTES * 2) as isize) as *const usize);
+            let x3 = *(ptr.offset((offset + USIZE_BYTES * 3) as isize) as *const usize);
+            let x4 = *(ptr.offset((offset + USIZE_BYTES * 4) as isize) as *const usize);
+            let x5 = *(ptr.offset((offset + USIZE_BYTES * 5) as isize) as *const usize);
+            let x6 = *(ptr.offset((offset + USIZE_BYTES * 6) as isize) as *const usize);
+            let x7 = *(ptr.offset((offset + USIZE_BYTES * 7) as isize) as *const usize);
+
+            count += ((mask_zero(x0 ^ REP_NEWLINE) + mask_zero(x1 ^ REP_NEWLINE)
+                     + mask_zero(x2 ^ REP_NEWLINE) + mask_zero(x3 ^ REP_NEWLINE))
+                    + (mask_zero(x4 ^ REP_NEWLINE) + mask_zero(x5 ^ REP_NEWLINE)
+                     + mask_zero(x6 ^ REP_NEWLINE) + mask_zero(x7 ^ REP_NEWLINE))
+                ).wrapping_mul(LO) >> ((USIZE_BYTES - 1) * 8);
+        }
+        offset += USIZE_BYTES * 8;
+    }
+    while offset + 4 * USIZE_BYTES <= len {
+        unsafe {
+            let x0 = *(ptr.offset(offset as isize) as *const usize);
+            let x1 = *(ptr.offset((offset + USIZE_BYTES) as isize) as *const usize);
+            let x2 = *(ptr.offset((offset + USIZE_BYTES * 2) as isize) as *const usize);
+            let x3 = *(ptr.offset((offset + USIZE_BYTES * 3) as isize) as *const usize);
+
+            count += (mask_zero(x0 ^ REP_NEWLINE) + mask_zero(x1 ^ REP_NEWLINE)
+                    + mask_zero(x2 ^ REP_NEWLINE) + mask_zero(x3 ^ REP_NEWLINE)
+                ).wrapping_mul(LO) >> ((USIZE_BYTES - 1) * 8)
+        }
+        offset += USIZE_BYTES * 4;
+    }
+    while offset + 2 * USIZE_BYTES <= len {
+        unsafe {
+            let x0 = *(ptr.offset(offset as isize) as *const usize);
+            let x1 = *(ptr.offset((offset + USIZE_BYTES) as isize) as *const usize);
+
+            count += (mask_zero(x0 ^ REP_NEWLINE) + mask_zero(x1 ^ REP_NEWLINE)
+                ).wrapping_mul(LO) >> ((USIZE_BYTES - 1) * 8)
+        }
+        offset += USIZE_BYTES * 2;
+    }
+    while offset + USIZE_BYTES <= len {
+        let x0 = unsafe { *(ptr.offset(offset as isize) as *const usize) };
+        count += mask_zero(x0 ^ REP_NEWLINE).wrapping_mul(LO) >> ((USIZE_BYTES - 1) * 8);
         offset += USIZE_BYTES;
     }
     count + text[offset..].iter().filter(|b| **b == b'\n').count()
@@ -191,6 +258,12 @@ fn test_fastest_nonewlines(b: &mut test::Bencher) {
 }
 
 #[bench]
+fn test_screaming_nonewlines(b: &mut test::Bencher) {
+    let data = repeated(b'n');
+    b.iter(move|| count_newlines_screaming(&data))
+}
+
+#[bench]
 fn test_slow_newlines(b: &mut test::Bencher) {
     let data = repeated(b'\n');
     b.iter(move|| count_newlines(&data))
@@ -212,6 +285,13 @@ fn test_faster_newlines(b: &mut test::Bencher) {
 fn test_fastest_newlines(b: &mut test::Bencher) {
     let data = repeated(b'\n');
     b.iter(move|| count_newlines_fastest(&data))
+}
+
+
+#[bench]
+fn test_screaming_newlines(b: &mut test::Bencher) {
+    let data = repeated(b'\n');
+    b.iter(move|| count_newlines_screaming(&data))
 }
 
 #[bench]
@@ -238,18 +318,28 @@ fn test_fastest_somenewlines(b: &mut test::Bencher) {
     b.iter(move|| count_newlines_fastest(data))
 }
 
+#[bench]
+fn test_screaming_somenewlines(b: &mut test::Bencher) {
+    let data = "abcd\nbcda\ncdab\ndabc\n\nbc\na\n\nd\n\nc\na\nc\n\n\n\n\nx";
+    b.iter(move|| count_newlines_screaming(data))
+}
+
+
 #[test]
 fn check() {
     let nonewlines = repeated(b'X');
     assert_eq!(count_newlines(&nonewlines), count_newlines_fast(&nonewlines));
     assert_eq!(count_newlines(&nonewlines), count_newlines_faster(&nonewlines));
     assert_eq!(count_newlines(&nonewlines), count_newlines_fastest(&nonewlines));
+    assert_eq!(count_newlines(&nonewlines), count_newlines_screaming(&nonewlines));
     let newlines = repeated(b'\n');
     assert_eq!(count_newlines(&newlines), count_newlines_fast(&newlines));
     assert_eq!(count_newlines(&newlines), count_newlines_faster(&newlines));
     assert_eq!(count_newlines(&newlines), count_newlines_fastest(&newlines));
+    assert_eq!(count_newlines(&newlines), count_newlines_screaming(&newlines));
     let somenewlines = "abcd\nbcda\ncdab\ndabc\n\nbc\na\n\nd\n\nc\na\nc\n\n\n\n\nx";
     assert_eq!(count_newlines(somenewlines), count_newlines_fast(somenewlines));
     assert_eq!(count_newlines(somenewlines), count_newlines_faster(somenewlines));
     assert_eq!(count_newlines(somenewlines), count_newlines_fastest(somenewlines));
+    assert_eq!(count_newlines(somenewlines), count_newlines_screaming(somenewlines));
 }
